@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SafetyNet Private Room</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { font-family: Arial; background: #111; color: #fff; text-align: center; padding: 20px; }
+    #chat { width: 90%; max-width: 600px; margin: 20px auto; background: #222; padding: 20px; border-radius: 10px; }
+    #messages { height: 300px; overflow-y: scroll; background: #000; padding: 10px; margin-bottom: 10px; border-radius: 5px; text-align: left; }
+    input, button { padding: 10px; margin: 5px; }
+    #sendBtn { background: maroon; color: gold; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <img src="assets/logo.jpeg" alt="SafetyNet Logo" style="width: 120px; margin-bottom: 10px;">
+  <h1>Private P2P Room 🔐</h1>
+  <div id="chat">
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <button id="sendBtn">Send</button>
+  </div>
+
+  <script>
+    const pc = new RTCPeerConnection();
+    let channel = null;
+    let messages = document.getElementById('messages');
+
+    function addMessage(msg, sender='You') {
+      const div = document.createElement('div');
+      div.textContent = sender + ": " + msg;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function getRoom() {
+      return location.hash.substring(1);
+    }
+
+    function setupChannelEvents() {
+      channel.onmessage = (e) => addMessage(e.data, 'Stranger');
+      channel.onopen = () => addMessage('Connected.');
+      channel.onclose = () => addMessage('Disconnected.');
+    }
+
+    async function createRoom() {
+      channel = pc.createDataChannel("chat");
+      setupChannelEvents();
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const roomLink = location.href.split('#')[0] + '#' + btoa(JSON.stringify(offer));
+      prompt("Share this link with a friend:", roomLink);
+    }
+
+    async function joinRoom(encodedOffer) {
+      const offer = JSON.parse(atob(encodedOffer));
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      pc.ondatachannel = (e) => {
+        channel = e.channel;
+        setupChannelEvents();
+      };
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      console.log("Share this answer manually if needed:", btoa(JSON.stringify(pc.localDescription)));
+    }
+
+    if (location.hash.length > 1) {
+      joinRoom(getRoom());
+    } else {
+      createRoom();
+    }
+
+    pc.onicecandidate = e => {
+      if (e.candidate) return;
+      console.log("ICE Gathering Done");
+    };
+
+    document.getElementById('sendBtn').onclick = () => {
+      const msg = document.getElementById('messageInput').value;
+      if (msg && channel && channel.readyState === "open") {
+        channel.send(msg);
+        addMessage(msg);
+        document.getElementById('messageInput').value = '';
+      }
+    };
+  </script>
+</body>
+</html>
